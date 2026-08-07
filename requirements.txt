@@ -1,2 +1,5 @@
-requests>=2.31.0
-fastmcp>=2.0.0
+# requirements.txt
+# Pinned to the versions confirmed running on the Horizon/Prefect MCP proxy
+# (server self-reports FastMCP 4.0.0b1). Keep == to avoid version drift on redeploy.
+fastmcp==4.0.0b1
+requests==2.34.2
