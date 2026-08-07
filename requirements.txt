@@ -2,4 +2,4 @@
 # Pinned to the versions confirmed running on the Horizon/Prefect MCP proxy
 # (server self-reports FastMCP 4.0.0b1). Keep == to avoid version drift on redeploy.
 fastmcp==4.0.0b1
-requests==2.32.3
+requests==2.34.2

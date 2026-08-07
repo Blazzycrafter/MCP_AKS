@@ -11,6 +11,7 @@ Hardened for production use:
 from __future__ import annotations
 
 import time
+import threading
 from collections import deque
 from typing import Annotated
 from fastmcp import FastMCP
@@ -25,16 +26,18 @@ REQUEST_TIMEOUT = 20
 RATE_LIMIT_MAX = 10
 RATE_LIMIT_WINDOW = 10.0
 _call_times: deque[float] = deque()
+_rate_lock = threading.Lock()
 
 
 def _rate_limited() -> bool:
-    now = time.monotonic()
-    while _call_times and now - _call_times[0] > RATE_LIMIT_WINDOW:
-        _call_times.popleft()
-    if len(_call_times) >= RATE_LIMIT_MAX:
-        return True
-    _call_times.append(now)
-    return False
+    with _rate_lock:
+        now = time.monotonic()
+        while _call_times and now - _call_times[0] > RATE_LIMIT_WINDOW:
+            _call_times.popleft()
+        if len(_call_times) >= RATE_LIMIT_MAX:
+            return True
+        _call_times.append(now)
+        return False
 
 
 @mcp.tool(
@@ -57,6 +60,14 @@ def search(
         ),
     ],
 ) -> dict:
+    query = name.strip()
+    if not query:
+        return {
+            "status": "invalid_input",
+            "message": "Search name must not be empty or whitespace only.",
+            "products": {},
+        }
+
     if _rate_limited():
         return {
             "status": "rate_limited",
@@ -68,7 +79,7 @@ def search(
         "action": "CatalogV2",
         "locale": "en",
         "currency": "EUR",
-        "search_name": name.strip(),
+        "search_name": query,
         "price_mode": "price_card",
         "sort_field": "popularity_score",
         "sort_order": "desc",
@@ -78,7 +89,14 @@ def search(
     try:
         response = requests.get(UPSTREAM_URL, params=params, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
-        data = response.json()
+        try:
+            data = response.json()
+        except requests.exceptions.JSONDecodeError:
+            return {
+                "status": "upstream_error",
+                "message": "Malformed response from the price aggregator.",
+                "products": {},
+            }
     except requests.RequestException as exc:
         return {
             "status": "upstream_error",
@@ -86,7 +104,8 @@ def search(
             "detail": type(exc).__name__,
             "products": {},
         }
-    except ValueError:
+
+    if not isinstance(data, dict):
         return {
             "status": "upstream_error",
             "message": "Malformed response from the price aggregator.",
@@ -101,6 +120,12 @@ def search(
         }
 
     products = data.get("products", [])
+    if not isinstance(products, list):
+        return {
+            "status": "upstream_error",
+            "message": "Malformed product list from the price aggregator.",
+            "products": {},
+        }
     result: dict[int, dict] = {}
 
     for p in products:
@@ -126,7 +151,7 @@ def search(
 
     return {
         "status": "success",
-        "query": name,
+        "query": query,
         "count": len(result),
         "pagination": data.get("pagination", {}),
         "products": result,
