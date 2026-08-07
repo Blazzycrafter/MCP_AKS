@@ -12,3 +12,7 @@ env/
 
 # Local token cache (do NOT commit)
 mcp_token.json
+
+# Local review artifacts
+coderabbit_review*.jsonl
+review*.jsonl
