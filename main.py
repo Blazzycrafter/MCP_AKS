@@ -363,10 +363,11 @@ def _search_impl(
     warnings = _as_list(data.get("warnings"))
 
     if data.get("status") != "success":
-        # Pass upstream "failed" through, including its error list.
+        # Surface the upstream failure without leaking internal error text
+        # (the module promises never to expose upstream internals).
         return {
-            "status": data.get("status", "error"),
-            "errors": _as_list(data.get("errors")),
+            "status": _as_str(data.get("status")) or "error",
+            "message": "The price aggregator could not complete the search.",
             "warnings": warnings,
             "products": [],
         }

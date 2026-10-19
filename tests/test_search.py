@@ -9,6 +9,8 @@ Run:  pytest -q
 
 from __future__ import annotations
 
+import json
+
 import pytest
 import requests
 from pydantic import TypeAdapter, ValidationError
@@ -393,7 +395,7 @@ def test_empty_results(monkeypatch):
     assert result["products"] == []
 
 
-def test_upstream_failed_passthrough(monkeypatch):
+def test_upstream_failed_is_sanitised(monkeypatch):
     payload = {
         "status": "failed",
         "warnings": ["Invalid field 'bogus' has been removed from selection."],
@@ -404,9 +406,21 @@ def test_upstream_failed_passthrough(monkeypatch):
 
     result = main._search_impl("minecraft")
     assert result["status"] == "failed"
-    assert result["errors"] == ["Internal error (Exception: ElasticSearch curl error (28))"]
+    assert result["message"] == "The price aggregator could not complete the search."
+    # Raw upstream internals must not be forwarded to clients.
+    assert "errors" not in result
+    assert "ElasticSearch" not in json.dumps(result)
     assert result["warnings"] == ["Invalid field 'bogus' has been removed from selection."]
     assert result["products"] == []
+
+
+def test_upstream_failed_non_string_status_is_normalised(monkeypatch):
+    payload = {"status": {"weird": True}, "errors": ["boom"], "products": []}
+    make_get(monkeypatch, payload)
+
+    result = main._search_impl("minecraft")
+    assert result["status"] == "error"
+    assert "errors" not in result
 
 
 def test_html_503(monkeypatch):

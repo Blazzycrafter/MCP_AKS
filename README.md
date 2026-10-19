@@ -63,8 +63,9 @@ product carries the **single best (cheapest) offer** for the requested currency;
 
 `products` is an **ordered list** in upstream order. On failure the envelope is
 one of `invalid_input`, `rate_limited`, `upstream_error` (network/timeout/
-non-JSON), or the upstream status (e.g. `failed` with an `errors` list).
-`warnings` from the upstream are passed through.
+non-JSON), or the upstream status (e.g. `failed`). Raw upstream error text is
+**not** forwarded — only a generic `message` — while upstream `warnings` are
+passed through.
 
 ### Heuristics and caveats
 
