@@ -50,6 +50,15 @@ def mcp_call(method, params, sid=None):
     return sid, json.load(resp)
 
 
+def call_search(sid, arguments):
+    sid, r = mcp_call("tools/call", {"name": "search", "arguments": arguments}, sid)
+    return sid, r.get("result", {})
+
+
+def structured(result):
+    return result.get("structuredContent", {})
+
+
 def main():
     sid, r1 = mcp_call("initialize", {
         "protocolVersion": "2024-11-05", "capabilities": {},
@@ -73,16 +82,54 @@ def main():
     assert [t["name"] for t in tools] == ["search"], tools
     schema = tools[0].get("inputSchema", {}).get("properties", {})
     assert "name" in schema, schema
+    # New optional parameters must be advertised in the schema.
+    for param in ("page", "per_page", "currency", "sort", "order",
+                  "exclude_accounts", "platform"):
+        assert param in schema, f"missing tool param: {param}"
     assert tools[0].get("description"), "tool must have a description"
 
-    # normal search
-    sid, r3 = mcp_call("tools/call", {"name": "search", "arguments": {"name": "minecraft"}}, sid)
-    res3 = r3.get("result", {})
-    assert res3.get("isError") is not True, res3
-    sc = res3.get("structuredContent", {})
+    # normal search — new list-based format
+    sid, res = call_search(sid, {"name": "minecraft"})
+    assert res.get("isError") is not True, res
+    sc = structured(res)
     assert sc.get("status") == "success", sc
     assert sc.get("count", 0) > 0, sc
-    print("[OK] search('minecraft') -> count=%d" % sc.get("count"))
+    assert isinstance(sc.get("products"), list), sc
+    assert sc.get("currency") == "eur", sc
+    assert isinstance(sc.get("pagination"), dict), sc
+    assert "warnings" in sc, sc
+    first = sc["products"][0]
+    assert first.get("listing_kind") in ("key", "account", "gift"), first
+    assert "best_offer" in first and "link" in first, first
+    if first["best_offer"]:
+        assert "buy_url" in first["best_offer"], first
+    print("[OK] search('minecraft') -> count=%d, currency=%s" % (sc.get("count"), sc.get("currency")))
+
+    # pagination + currency + sort parameters
+    sid, res2 = call_search(sid, {"name": "minecraft", "page": 1, "per_page": 5,
+                                  "currency": "usd", "sort": "price", "order": "asc"})
+    sc2 = structured(res2)
+    assert sc2.get("status") == "success", sc2
+    assert sc2.get("currency") == "usd", sc2
+    assert sc2.get("pagination", {}).get("per_page") == 5, sc2
+    assert len(sc2.get("products", [])) <= 5, sc2
+    print("[OK] page/per_page/currency/sort mapping")
+
+    # exclude_accounts and platform filters must not error
+    sid, res3 = call_search(sid, {"name": "god of war", "exclude_accounts": True})
+    sc3 = structured(res3)
+    assert sc3.get("status") == "success", sc3
+    assert all(p.get("listing_kind") != "account" for p in sc3.get("products", [])), sc3
+    sid, res4 = call_search(sid, {"name": "god of war", "platform": "ps5"})
+    sc4 = structured(res4)
+    assert sc4.get("status") == "success", sc4
+    print("[OK] exclude_accounts + platform filters")
+
+    # extended regex must accept real titles with comma/plus/registered marks
+    sid, res5 = call_search(sid, {"name": "Warhammer 40,000"})
+    sc5 = structured(res5)
+    assert sc5.get("status") in ("success", "failed"), sc5
+    print("[OK] 'Warhammer 40,000' accepted by input validation")
 
     # overlong name must be rejected by the schema
     sid, r4 = mcp_call("tools/call", {"name": "search", "arguments": {"name": "a" * 200}}, sid)
@@ -95,10 +142,9 @@ def main():
     print("[OK] bad-chars rejected")
 
     # whitespace-only name must be rejected (normalized to empty)
-    sid, r6 = mcp_call("tools/call", {"name": "search", "arguments": {"name": "   "}}, sid)
-    res6 = r6.get("result", {})
+    sid, res6 = call_search(sid, {"name": "   "})
     assert res6.get("isError") is not True, res6
-    assert res6.get("structuredContent", {}).get("status") == "invalid_input", res6
+    assert structured(res6).get("status") == "invalid_input", res6
     print("[OK] whitespace-only name rejected")
 
     print("[DONE] all local smoke tests passed")
