@@ -311,6 +311,27 @@ def test_platform_filter(monkeypatch):
     assert result["count"] == 0
 
 
+def test_platform_short_token_is_not_a_substring(monkeypatch):
+    # "ea" must not match "Steam" (regression guard for CodeRabbit finding).
+    products = [
+        make_product(1, "EA Sports FC", platforms=["EA App"], offer=make_offer(10)),
+        make_product(2, "Some Steam Game", platforms=["Steam"], offer=make_offer(10)),
+    ]
+    make_get(monkeypatch, success_payload(products))
+    result = main._search_impl("game", platform="ea")
+    assert [p["id"] for p in result["products"]] == [1]
+
+
+def test_platform_multiword_token(monkeypatch):
+    products = [
+        make_product(1, "Game Xbox One", platforms=["Xbox One"], offer=make_offer(10)),
+        make_product(2, "Game Xbox Series", platforms=["Xbox Series"], offer=make_offer(10)),
+    ]
+    make_get(monkeypatch, success_payload(products))
+    result = main._search_impl("game", platform="xbox one")
+    assert [p["id"] for p in result["products"]] == [1]
+
+
 # --------------------------------------------------------------------------
 # Empty / failure modes
 # --------------------------------------------------------------------------

@@ -262,13 +262,24 @@ def _matches_platform(product: dict, platform: str) -> bool:
 
     for raw in _as_list(product.get("activation_platforms")):
         name = _as_str(_as_dict(raw).get("name"))
-        if name and token in name.lower():
+        if not name:
+            continue
+        lname = name.lower()
+        # Whole-token match: "ea" must not match "Steam".
+        if lname == token or token in re.findall(r"[a-z0-9]+", lname):
+            return True
+        # Multi-word tokens (e.g. "xbox one") match as a whole phrase.
+        if " " in token and re.search(rf"\b{re.escape(token)}\b", lname):
             return True
 
     pname = (_as_str(product.get("name")) or "").lower()
     if pname.endswith(" " + token) or pname.endswith("-" + token):
         return True
-    return token in re.findall(r"[a-z0-9]+", pname)
+    if token in re.findall(r"[a-z0-9]+", pname):
+        return True
+    if " " in token and re.search(rf"\b{re.escape(token)}\b", pname):
+        return True
+    return False
 
 
 # --- Core logic (separated from the tool wrapper for offline unit tests) -----
