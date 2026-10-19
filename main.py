@@ -140,18 +140,29 @@ def _as_num(value: Any) -> int | float | None:
     return None
 
 
-def _listing_kind(name: str | None, region_name: str | None) -> str:
-    """Heuristic listing classification (documented in README).
+def _listing_kind(
+    name: str | None,
+    region_name: str | None,
+    upstream_type: str | None = None,
+) -> str:
+    """Classify a listing as ``key``, ``account`` or ``gift``.
 
-    * "account" — the product name ends with " Account" (case-insensitive).
+    The upstream ``type`` field is authoritative when it carries a recognised
+    value (``account``/``key``/``gift``, case-insensitive). Missing or unknown
+    values (e.g. ``game``, ``dlc``) fall back to a heuristic:
+
+    * "account" — the word "account" appears anywhere in the product name
+      (e.g. "... Account Deluxe Edition", "... Account PS5"), not only as a
+      trailing suffix.
     * "gift"    — the best offer's region name contains "Gift".
     * "key"     — everything else.
-
-    This is a best-effort heuristic; the upstream API exposes no explicit
-    listing-kind field.
     """
+    utype = (upstream_type or "").strip().lower()
+    if utype in ("account", "key", "gift"):
+        return utype
+
     lname = (name or "").strip().lower()
-    if lname.endswith(" account"):
+    if re.search(r"\baccounts?\b", lname):
         return "account"
     if region_name and "gift" in region_name.lower():
         return "gift"
@@ -368,7 +379,11 @@ def _search_impl(
 
         best = _best_offer(_as_list(product.get("offers")), currency)
         region_name = best["region"] if best else None
-        kind = _listing_kind(_as_str(product.get("name")), region_name)
+        kind = _listing_kind(
+            _as_str(product.get("name")),
+            region_name,
+            _as_str(product.get("type")),
+        )
 
         if exclude_accounts and kind == "account":
             continue
@@ -413,8 +428,9 @@ def _search_impl(
         "single best (cheapest) offer for the current price_card query; "
         "offers_count is the total number of offers across all merchants. "
         "Prices are in the requested currency (eur/usd/gbp). Products are "
-        "returned as an ordered list. `listing_kind` is a heuristic "
-        "(key/account/gift): use `exclude_accounts` to drop account listings. "
+        "returned as an ordered list. `listing_kind` (key/account/gift) uses the "
+        "upstream product type when available, falling back to a name/region "
+        "heuristic: use `exclude_accounts` to drop account listings. "
         "A best_offer with is_free=true means the price is 0 (e.g. free DLC) and "
         "is not a paid bargain. `platform` filters client-side by activation "
         "platform / product name and only affects the current page, since no "

@@ -68,10 +68,14 @@ non-JSON), or the upstream status (e.g. `failed` with an `errors` list).
 
 ### Heuristics and caveats
 
-* **`listing_kind` is a heuristic** (the upstream exposes no listing-kind
-  field): `account` if the product name ends with `" Account"`, `gift` if the
-  best offer's region name contains `"Gift"`, otherwise `key`.
-  `exclude_accounts` filters on this heuristic.
+* **`listing_kind`** (`key`/`account`/`gift`) uses the upstream product
+  `type` field when it carries a recognised value (`account`/`key`/`gift`).
+  When the type is missing or unknown (e.g. `game`, `dlc`), it falls back to a
+  heuristic: `account` if the word `account` appears anywhere in the product
+  name (so `"… Account Deluxe Edition"` and `"… Account PS5"` are caught, not
+  only a trailing `" Account"`), `gift` if the best offer's region name
+  contains `"Gift"`, otherwise `key`. `exclude_accounts` filters on this
+  classification.
 * **`platform` is client-side and only filters the current page.** No
   server-side platform filter is known, so cross-page platform filtering is not
   possible with a single request. Matching is case-insensitive and looks at the

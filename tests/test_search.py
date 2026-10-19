@@ -279,6 +279,56 @@ def test_listing_kind_account_gift_key(monkeypatch):
     assert kinds == ["account", "gift", "key"]
 
 
+def test_listing_kind_uses_upstream_type_with_suffix(monkeypatch):
+    # Codex P2: type="account" but the name has text after "Account"
+    # (edition/platform). Must still classify as account and be filtered.
+    products = [
+        make_product(1, "God of War Ragnarok Account Deluxe Edition",
+                     type_="account", offer=make_offer(19.99)),
+        make_product(2, "God of War Ragnarok Account PS5",
+                     type_="account", offer=make_offer(19.99)),
+        make_product(3, "God of War", type_="game", offer=make_offer(9.99)),
+    ]
+    make_get(monkeypatch, success_payload(products))
+
+    result = main._search_impl("god of war")
+    kinds = {p["id"]: p["listing_kind"] for p in result["products"]}
+    assert kinds == {1: "account", 2: "account", 3: "key"}
+
+    filtered = main._search_impl("god of war", exclude_accounts=True)
+    assert [p["id"] for p in filtered["products"]] == [3]
+
+
+def test_listing_kind_fallback_when_type_missing_or_unknown(monkeypatch):
+    products = [
+        # no type field at all -> name heuristic catches "Account" anywhere
+        {"id": 1, "name": "Some Game Account PS5", "offers": [make_offer(5)]},
+        # unknown type -> name heuristic
+        make_product(2, "Some Game Account Deluxe Edition", type_="mystery",
+                     offer=make_offer(5)),
+        # unknown type, no account word -> key
+        make_product(3, "Some Game", type_="mystery", offer=make_offer(5)),
+        # missing type, no account word -> key
+        {"id": 4, "name": "Some Game", "offers": [make_offer(5)]},
+    ]
+    make_get(monkeypatch, success_payload(products))
+
+    result = main._search_impl("some")
+    kinds = {p["id"]: p["listing_kind"] for p in result["products"]}
+    assert kinds == {1: "account", 2: "account", 3: "key", 4: "key"}
+
+
+def test_listing_kind_recognised_type_key_and_gift(monkeypatch):
+    products = [
+        make_product(1, "Some Game", type_="key", offer=make_offer(5)),
+        make_product(2, "Some Game", type_="gift", offer=make_offer(5)),
+    ]
+    make_get(monkeypatch, success_payload(products))
+
+    kinds = [p["listing_kind"] for p in main._search_impl("some")["products"]]
+    assert kinds == ["key", "gift"]
+
+
 def test_exclude_accounts(monkeypatch):
     products = [
         make_product(1, "God of War", offer=make_offer(9.99)),
