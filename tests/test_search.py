@@ -423,6 +423,20 @@ def test_upstream_failed_non_string_status_is_normalised(monkeypatch):
     assert "errors" not in result
 
 
+def test_upstream_failed_descriptive_status_is_normalised(monkeypatch):
+    payload = {
+        "status": "Internal error (Exception: ElasticSearch curl error (28))",
+        "errors": ["boom"],
+        "products": [],
+    }
+    make_get(monkeypatch, payload)
+
+    result = main._search_impl("minecraft")
+    # A descriptive upstream status must not be forwarded verbatim.
+    assert result["status"] == "error"
+    assert "ElasticSearch" not in json.dumps(result)
+
+
 def test_html_503(monkeypatch):
     make_get(monkeypatch, text="<html><body>Backend fetch failed</body></html>", status=503)
     result = main._search_impl("minecraft")

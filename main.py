@@ -364,9 +364,11 @@ def _search_impl(
 
     if data.get("status") != "success":
         # Surface the upstream failure without leaking internal error text
-        # (the module promises never to expose upstream internals).
+        # (the module promises never to expose upstream internals). Only a
+        # known status is forwarded; anything else normalises to "error".
+        raw_status = _as_str(data.get("status"))
         return {
-            "status": _as_str(data.get("status")) or "error",
+            "status": raw_status if raw_status == "failed" else "error",
             "message": "The price aggregator could not complete the search.",
             "warnings": warnings,
             "products": [],
